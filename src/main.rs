@@ -1,0 +1,241 @@
+use std::env;
+use std::process::{Command, ExitStatus};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let dash_dash_pos = match args.iter().position(|r| r == "--") {
+        Some(pos) => pos,
+        None => {
+            eprintln!("Error: Target command separator '--' not found.");
+            std::process::exit(1);
+        }
+    };
+
+    let option_args = &args[1..dash_dash_pos];
+    let target_args = &args[dash_dash_pos + 1..];
+
+    if target_args.is_empty() {
+        eprintln!("Error: No target command specified after '--'.");
+        std::process::exit(1);
+    }
+
+    let max_index = target_args.len() - 1;
+
+    let mut input_str: Option<&str> = None;
+    let mut output_str: Option<&str> = None;
+    let mut drop_str: Option<&str> = None;
+    let mut swap_str: Option<&str> = None;
+
+    let mut i = 0;
+    while i < option_args.len() {
+        match option_args[i].as_str() {
+            "-i" | "--input" => {
+                if i + 1 < option_args.len() {
+                    input_str = Some(&option_args[i + 1]);
+                    i += 2;
+                } else {
+                    missing_arg("-i");
+                }
+            }
+            "-o" | "--output" => {
+                if i + 1 < option_args.len() {
+                    output_str = Some(&option_args[i + 1]);
+                    i += 2;
+                } else {
+                    missing_arg("-o");
+                }
+            }
+            "-d" | "--drop" => {
+                if i + 1 < option_args.len() {
+                    drop_str = Some(&option_args[i + 1]);
+                    i += 2;
+                } else {
+                    missing_arg("-d");
+                }
+            }
+            "-s" | "--swap" => {
+                if i + 1 < option_args.len() {
+                    swap_str = Some(&option_args[i + 1]);
+                    i += 2;
+                } else {
+                    missing_arg("-s");
+                }
+            }
+            _ => {
+                eprintln!("Error: Unknown option '{}'", option_args[i]);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let mut indexed_args: Vec<(usize, String)> = target_args
+        .iter()
+        .enumerate()
+        .map(|(idx, val)| (idx, val.clone()))
+        .collect();
+
+    if let Some(d_val) = drop_str {
+        let drop_indices = parse_indices(d_val);
+
+        for &idx in &drop_indices {
+            if idx > max_index {
+                eprintln!(
+                    "Error: Drop index {} is out of bounds (max: {}).",
+                    idx, max_index
+                );
+                std::process::exit(1);
+            }
+        }
+
+        indexed_args.retain(|(idx, _)| !drop_indices.contains(idx));
+    }
+
+    if let Some(s_val) = swap_str {
+        let swap_base_indices = parse_indices(s_val);
+
+        for &base in &swap_base_indices {
+            if base >= max_index {
+                eprintln!(
+                    "Error: Cannot swap index {} and {}. Out of bounds (max: {}).",
+                    base,
+                    base + 1,
+                    max_index
+                );
+                std::process::exit(1);
+            }
+        }
+
+        for base in swap_base_indices {
+            let pos1 = indexed_args.iter().position(|(idx, _)| *idx == base);
+            let pos2 = indexed_args.iter().position(|(idx, _)| *idx == base + 1);
+            if let (Some(p1), Some(p2)) = (pos1, pos2) {
+                indexed_args.swap(p1, p2);
+            } else {
+                eprintln!("Error: Swap target elements were already dropped.");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let (Some(i_val), Some(o_val)) = (input_str, output_str) {
+        let in_indices = parse_indices(i_val);
+        let out_indices = parse_indices(o_val);
+
+        if in_indices.len() != out_indices.len() {
+            eprintln!("Error: The number of elements in --input and --output must match.");
+            std::process::exit(1);
+        }
+
+        for &idx in &in_indices {
+            if idx > max_index {
+                eprintln!(
+                    "Error: Input index {} is out of bounds (max: {}).",
+                    idx, max_index
+                );
+                std::process::exit(1);
+            }
+        }
+
+        for &idx in &out_indices {
+            if idx > max_index {
+                eprintln!(
+                    "Error: Output index {} is out of bounds (max: {}).",
+                    idx, max_index
+                );
+                std::process::exit(1);
+            }
+        }
+
+        let mut target_positions = Vec::new();
+        for &in_idx in &in_indices {
+            if let Some(pos) = indexed_args.iter().position(|(idx, _)| *idx == in_idx) {
+                target_positions.push(pos);
+            } else {
+                eprintln!(
+                    "Error: Input index {} was already dropped by previous options.",
+                    in_idx
+                );
+                std::process::exit(1);
+            }
+        }
+
+        let mut moved_items = Vec::new();
+        for &pos in &target_positions {
+            moved_items.push(indexed_args[pos].clone());
+        }
+
+        for (k, &out_idx) in out_indices.iter().enumerate() {
+            if let Some(pos) = indexed_args.iter().position(|(idx, _)| *idx == out_idx) {
+                indexed_args[pos] = moved_items[k].clone();
+            } else {
+                eprintln!(
+                    "Error: Output destination index {} was already dropped.",
+                    out_idx
+                );
+                std::process::exit(1);
+            }
+        }
+    } else if input_str.is_some() || output_str.is_some() {
+        eprintln!("Error: Both --input and --output must be specified together.");
+        std::process::exit(1);
+    }
+
+    let final_args: Vec<String> = indexed_args.into_iter().map(|(_, val)| val).collect();
+    if final_args.is_empty() {
+        eprintln!("Error: No arguments left to execute.");
+        std::process::exit(1);
+    }
+
+    let command_name = &final_args[0];
+    let command_args = &final_args[1..];
+
+    let status: ExitStatus = Command::new(command_name)
+        .args(command_args)
+        .status()
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Error: Failed to execute command '{}': {}",
+                command_name, err
+            );
+            std::process::exit(1);
+        });
+
+    if let Some(code) = status.code() {
+        std::process::exit(code);
+    }
+}
+
+fn missing_arg(opt: &str) {
+    eprintln!("Error: Missing value for option '{}'", opt);
+    std::process::exit(1);
+}
+
+fn parse_indices(s: &str) -> Vec<usize> {
+    let mut indices = Vec::new();
+    for part in s.split(',') {
+        let part = part.trim();
+        if part.contains('-') {
+            let bounds: Vec<&str> = part.split('-').collect();
+            if bounds.len() == 2 {
+                if let (Ok(start), Ok(end)) = (
+                    bounds[0].trim().parse::<usize>(),
+                    bounds[1].trim().parse::<usize>(),
+                ) {
+                    if start <= end {
+                        for idx in start..=end {
+                            indices.push(idx);
+                        }
+                    } else {
+                        for idx in (end..=start).rev() {
+                            indices.push(idx);
+                        }
+                    }
+                }
+            }
+        } else if let Ok(idx) = part.parse::<usize>() {
+            indices.push(idx);
+        }
+    }
+    indices
+}
