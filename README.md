@@ -7,7 +7,7 @@ A simple and flexible command-line utility to reorder, swap, or drop arguments b
 You can install `argswap` directly from your GitHub repository using Cargo:
 
 ```bash
-cargo install --git https://github.com
+cargo install --git https://github.com/shiudow/argswap.git
 ```
 
 ## Usage
