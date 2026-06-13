@@ -1,23 +1,33 @@
-
 use std::env;
 use std::process::{Command, ExitStatus};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let dash_dash_pos = match args.iter().position(|r| r == "--") {
-        Some(pos) => pos,
+    let dash_dash_pos = args.iter().position(|r| r == "--");
+
+    let (option_args, target_args) = match dash_dash_pos {
+        Some(pos) => (&args[1..pos], &args[pos + 1..]),
         None => {
-            eprintln!("Error: Target command separator '--' not found.");
-            std::process::exit(1);
+            let mut split_idx = args.len();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "-i" | "--input" | "-o" | "--output" | "-d" | "--drop" | "-s" | "--swap" => {
+                        i += 2;
+                    }
+                    _ => {
+                        split_idx = i;
+                        break;
+                    }
+                }
+            }
+            (&args[1..split_idx], &args[split_idx..])
         }
     };
 
-    let option_args = &args[1..dash_dash_pos];
-    let target_args = &args[dash_dash_pos + 1..];
-
     if target_args.is_empty() {
-        eprintln!("Error: No target command specified after '--'.");
+        eprintln!("Error: No target command specified.");
         std::process::exit(1);
     }
 
@@ -233,7 +243,10 @@ fn parse_indices(s: &str, total_len: usize) -> Vec<usize> {
     for part in s.split(',') {
         let part = part.trim();
         if let Some(dash_pos) = part.find('-') {
-            if dash_pos > 0 && !part.as_bytes()[dash_pos - 1].is_ascii_digit() && part.as_bytes()[dash_pos - 1] != b' ' {
+            if dash_pos > 0
+                && !part.as_bytes()[dash_pos - 1].is_ascii_digit()
+                && part.as_bytes()[dash_pos - 1] != b' '
+            {
                 if let Some(idx) = parse_single_index(part, total_len) {
                     indices.push(idx);
                 }
@@ -252,7 +265,10 @@ fn parse_indices(s: &str, total_len: usize) -> Vec<usize> {
             } else {
                 (&part[..dash_pos], &part[dash_pos + 1..])
             };
-            if let (Some(start), Some(end)) = (parse_single_index(left, total_len), parse_single_index(right, total_len)) {
+            if let (Some(start), Some(end)) = (
+                parse_single_index(left, total_len),
+                parse_single_index(right, total_len),
+            ) {
                 if start <= end {
                     for idx in start..=end {
                         indices.push(idx);
