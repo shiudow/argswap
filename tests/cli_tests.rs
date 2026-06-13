@@ -23,8 +23,6 @@ fn run_argswap(args: &[&str]) -> (i32, String, String) {
 
 #[test]
 fn test_normal_swap_io() {
-    // 0:echo, 1:foo, 2:hoo
-    // $ argswap -i 1,2 -o 2,1 -- echo foo hoo
     let (code, stdout, _stderr) =
         run_argswap(&["-i", "1,2", "-o", "2,1", "--", "echo", "foo", "hoo"]);
     assert_eq!(code, 0);
@@ -33,8 +31,6 @@ fn test_normal_swap_io() {
 
 #[test]
 fn test_normal_drop() {
-    // 0:echo, 1:foo, 2:hoo, 3:bar
-    // $ argswap -d 1,3 -- echo foo hoo bar
     let (code, stdout, _stderr) = run_argswap(&["-d", "1,3", "--", "echo", "foo", "hoo", "bar"]);
     assert_eq!(code, 0);
     assert_eq!(stdout.trim(), "hoo");
@@ -42,8 +38,6 @@ fn test_normal_drop() {
 
 #[test]
 fn test_normal_adjacent_swap() {
-    // 0:echo, 1:foo, 2:hoo, 3:bar
-    // $ argswap -s 0,2 -- echo foo hoo bar
     let (code, _stdout, stderr) = run_argswap(&["-s", "0,2", "--", "echo", "foo", "hoo", "bar"]);
     assert_ne!(code, 0);
     assert!(stderr.contains("Failed to execute command 'foo'"));
@@ -69,4 +63,46 @@ fn test_error_swap_out_of_bounds() {
     let (code, _stdout, stderr) = run_argswap(&["-s", "2", "--", "echo", "foo", "hoo"]);
     assert_ne!(code, 0);
     assert!(stderr.contains("Error: Cannot swap index 2 and 3. Out of bounds"));
+}
+
+#[test]
+fn test_negative_indices() {
+    let (code, stdout, _stderr) = run_argswap(&["-d", "-1", "--", "echo", "foo", "hoo", "bar"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "foo hoo");
+
+    let (code, stdout, _stderr) =
+        run_argswap(&["-i", "-2,-1", "-o", "-1,-2", "--", "echo", "foo", "hoo"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "hoo foo");
+
+    let (code, stdout, _stderr) = run_argswap(&["-d", "-3--1", "--", "echo", "foo", "hoo", "bar"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn test_omit_dash_dash() {
+    let (code, stdout, _stderr) = run_argswap(&["-d", "1", "echo", "foo", "hoo"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "hoo");
+
+    let (code, stdout, _stderr) = run_argswap(&["echo", "foo", "hoo"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "foo hoo");
+}
+
+#[test]
+fn test_help_option() {
+    let (code, stdout, _stderr) = run_argswap(&["-h"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Usage: argswap"));
+
+    let (code, stdout, _stderr) = run_argswap(&["--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Usage: argswap"));
+
+    let (code, stdout, _stderr) = run_argswap(&["-d", "1", "-h", "echo", "foo"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Usage: argswap"));
 }
