@@ -1,8 +1,26 @@
 use std::env;
 use std::process::{Command, ExitStatus};
 
+fn print_help() {
+    println!("Usage: argswap [options] [--] <command> [args...]");
+    println!();
+    println!("Options:");
+    println!("  -h, --help           Show this help message");
+    println!("  -i, --input <idx>    Specify input source indices (supports negative indices like -1)");
+    println!("  -o, --output <idx>   Specify output destination indices (supports negative indices like -1)");
+    println!("  -d, --drop <idx>     Drop specified indices (supports negative indices like -1)");
+    println!("  -s, --swap <idx>     Swap adjacent indices (idx and idx+1) (supports negative indices like -1)");
+    println!();
+    println!("Note: Indices can be comma-separated or ranges (e.g., 0-2, -3--1).");
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    if args.iter().any(|arg| arg == "-h" || arg == "--help") {
+        print_help();
+        std::process::exit(0);
+    }
 
     let dash_dash_pos = args.iter().position(|r| r == "--");
 
@@ -243,10 +261,7 @@ fn parse_indices(s: &str, total_len: usize) -> Vec<usize> {
     for part in s.split(',') {
         let part = part.trim();
         if let Some(dash_pos) = part.find('-') {
-            if dash_pos > 0
-                && !part.as_bytes()[dash_pos - 1].is_ascii_digit()
-                && part.as_bytes()[dash_pos - 1] != b' '
-            {
+            if dash_pos > 0 && !part.as_bytes()[dash_pos - 1].is_ascii_digit() && part.as_bytes()[dash_pos - 1] != b' ' {
                 if let Some(idx) = parse_single_index(part, total_len) {
                     indices.push(idx);
                 }
@@ -265,10 +280,7 @@ fn parse_indices(s: &str, total_len: usize) -> Vec<usize> {
             } else {
                 (&part[..dash_pos], &part[dash_pos + 1..])
             };
-            if let (Some(start), Some(end)) = (
-                parse_single_index(left, total_len),
-                parse_single_index(right, total_len),
-            ) {
+            if let (Some(start), Some(end)) = (parse_single_index(left, total_len), parse_single_index(right, total_len)) {
                 if start <= end {
                     for idx in start..=end {
                         indices.push(idx);
