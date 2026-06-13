@@ -1,3 +1,4 @@
+
 use std::env;
 use std::process::{Command, ExitStatus};
 
@@ -20,7 +21,8 @@ fn main() {
         std::process::exit(1);
     }
 
-    let max_index = target_args.len() - 1;
+    let total_len = target_args.len();
+    let max_index = total_len - 1;
 
     let mut input_str: Option<&str> = None;
     let mut output_str: Option<&str> = None;
@@ -76,7 +78,7 @@ fn main() {
         .collect();
 
     if let Some(d_val) = drop_str {
-        let drop_indices = parse_indices(d_val);
+        let drop_indices = parse_indices(d_val, total_len);
 
         for &idx in &drop_indices {
             if idx > max_index {
@@ -92,7 +94,7 @@ fn main() {
     }
 
     if let Some(s_val) = swap_str {
-        let swap_base_indices = parse_indices(s_val);
+        let swap_base_indices = parse_indices(s_val, total_len);
 
         for &base in &swap_base_indices {
             if base >= max_index {
@@ -119,8 +121,8 @@ fn main() {
     }
 
     if let (Some(i_val), Some(o_val)) = (input_str, output_str) {
-        let in_indices = parse_indices(i_val);
-        let out_indices = parse_indices(o_val);
+        let in_indices = parse_indices(i_val, total_len);
+        let out_indices = parse_indices(o_val, total_len);
 
         if in_indices.len() != out_indices.len() {
             eprintln!("Error: The number of elements in --input and --output must match.");
@@ -211,29 +213,57 @@ fn missing_arg(opt: &str) {
     std::process::exit(1);
 }
 
-fn parse_indices(s: &str) -> Vec<usize> {
+fn parse_single_index(s: &str, total_len: usize) -> Option<usize> {
+    let s = s.trim();
+    if s.starts_with('-') {
+        if let Ok(val) = s.parse::<isize>() {
+            let idx = total_len as isize + val;
+            if idx >= 0 {
+                return Some(idx as usize);
+            }
+        }
+        None
+    } else {
+        s.parse::<usize>().ok()
+    }
+}
+
+fn parse_indices(s: &str, total_len: usize) -> Vec<usize> {
     let mut indices = Vec::new();
     for part in s.split(',') {
         let part = part.trim();
-        if part.contains('-') {
-            let bounds: Vec<&str> = part.split('-').collect();
-            if bounds.len() == 2 {
-                if let (Ok(start), Ok(end)) = (
-                    bounds[0].trim().parse::<usize>(),
-                    bounds[1].trim().parse::<usize>(),
-                ) {
-                    if start <= end {
-                        for idx in start..=end {
-                            indices.push(idx);
-                        }
-                    } else {
-                        for idx in (end..=start).rev() {
-                            indices.push(idx);
-                        }
+        if let Some(dash_pos) = part.find('-') {
+            if dash_pos > 0 && !part.as_bytes()[dash_pos - 1].is_ascii_digit() && part.as_bytes()[dash_pos - 1] != b' ' {
+                if let Some(idx) = parse_single_index(part, total_len) {
+                    indices.push(idx);
+                }
+                continue;
+            }
+            let (left, right) = if dash_pos == 0 {
+                if let Some(next_dash) = part[1..].find('-') {
+                    let actual_dash = next_dash + 1;
+                    (&part[..actual_dash], &part[actual_dash + 1..])
+                } else {
+                    if let Some(idx) = parse_single_index(part, total_len) {
+                        indices.push(idx);
+                    }
+                    continue;
+                }
+            } else {
+                (&part[..dash_pos], &part[dash_pos + 1..])
+            };
+            if let (Some(start), Some(end)) = (parse_single_index(left, total_len), parse_single_index(right, total_len)) {
+                if start <= end {
+                    for idx in start..=end {
+                        indices.push(idx);
+                    }
+                } else {
+                    for idx in (end..=start).rev() {
+                        indices.push(idx);
                     }
                 }
             }
-        } else if let Ok(idx) = part.parse::<usize>() {
+        } else if let Some(idx) = parse_single_index(part, total_len) {
             indices.push(idx);
         }
     }
